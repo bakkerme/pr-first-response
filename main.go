@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	hfutils "github.com/bakkerme/hyperfocus-utils"
 	"github.com/google/go-github/v40/github"
+	"github.com/hexops/valast"
 	"golang.org/x/oauth2"
 )
 
@@ -26,12 +29,24 @@ func main() {
 
 	client := github.NewClient(tc)
 
-	searchResult, _, err := client.Search.Issues(ctx, "user-review-requested:@me", nil)
+	searchResult, _, err := client.Search.Issues(ctx, "user-review-requested:@me", &github.SearchOptions{ListOptions: github.ListOptions{PerPage: 100}})
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println(searchResult)
+	for _, result := range searchResult.Issues {
+		fmt.Println(*result.Title)
+		fmt.Println(*result.HTMLURL)
+		fmt.Println(result.CreatedAt.Local())
+
+		repoData := getPRDataFromURL(*result.HTMLURL)
+		pr, _, err := client.PullRequests.Get(ctx, repoData.owner, repoData.repo, repoData.id)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println(valast.String(pr))
+	}
 
 	// notifications, _, err := client.Activity.ListNotifications(ctx, nil)
 	// if err != nil {
@@ -58,4 +73,31 @@ func main() {
 	// }
 
 	// fmt.Println(repos)
+}
+
+type ownerAndRepo struct {
+	owner string
+	repo  string
+	id    int
+}
+
+func getPRDataFromURL(url string) ownerAndRepo {
+	// https://github.com/bakkerme/pr-first-response/pull/1
+	splite := strings.Split(url, "/")
+	fmt.Println(splite)
+
+	owner := splite[3]
+	repo := splite[4]
+	idStr := splite[6]
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		panic(err)
+	}
+
+	return ownerAndRepo{
+		owner: owner,
+		repo:  repo,
+		id:    id,
+	}
 }
